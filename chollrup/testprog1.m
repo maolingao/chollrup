@@ -1,8 +1,16 @@
+% require muldiag() in git@github.com:maolingao/essential.git
+%
+path = matlab.desktop.editor.getActiveFilename;
+path = fileparts(path);
+cd(path)
+addpath('../../essential/essential');
+%
 n=1000;
 maxlam=2; minlam=0.1;
 cvec=zeros(n,1); svec=zeros(n,1);
 wkvec=zeros(3*n,1);
 
+%%
 % Test positive updates
 fprintf(1,'Testing pos. updates\n');
 for i=1:10
@@ -23,6 +31,23 @@ for i=1:10
   fprintf(1,'Max. dist. Z: %e\n',max(max(abs(z-z_2))));
 end
 
+%% test minimum positive update
+fprintf(1,'Testing minimum pos. updates\n');
+for i=1:10
+  % Create matrix A with controlled spectrum
+  [q,r]=qr(randn(n,n));
+  a=muldiag(q,rand(n,1)*(maxlam-minlam)+minlam)*q';
+  lfact=chol(a)';
+  % Update
+  vec=randn(n,1);
+  if choluprk1({lfact,[1 1 n n],'L '},vec,cvec,svec,wkvec)~=0
+    error('Numerical error in CHOLUPRK1!');
+  end
+  l_2=chol(a+vec*vec')';
+  fprintf(1,'Max. dist. L: %e\n',max(max(abs(lfact-l_2)))); % not enough input arguments
+end
+
+%%
 % Test negative updates
 fprintf(1,'Testing neg. updates\n');
 for i=1:10

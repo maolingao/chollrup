@@ -1,6 +1,6 @@
 all:	dchex.o
-	mex -O choluprk1.c
-	mex -O choldnrk1.c
+	mex -O choluprk1.c -lblas
+	mex -O choldnrk1.c -lblas
 	mex -O cholupexch.c dchex.o
 
 dchex.o:	dchex.f
