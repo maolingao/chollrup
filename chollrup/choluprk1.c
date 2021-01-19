@@ -82,12 +82,21 @@ void mexFunction(int nlhs,mxArray *plhs[],int nrhs,const mxArray *prhs[])
     mexErrMsgTxt("Not enough input arguments");
   if (nlhs>1)
     mexErrMsgTxt("Too many return arguments");
+  
+    if (!mxIsCell(prhs[0])) {
+        printf("[choluprk1] Normal matrix\n");
+    }
+    else {
+        printf("[choluprk1] Cell matrix\n");
+    }
   parseBLASMatrix(prhs[0],"L",&lmat,-1,-1);
   /*
   sprintf(errMsg,"%d, %d, '%s', %c\n",lmat.m,lmat.n,lmat.strcode,
 	  UPLO(lmat.strcode));
   mexPrintf(errMsg);
   */
+  // printf("[choluprk1] lmat.strcode=(%.4s)\n",lmat.strcode);
+  // printf("[choluprk1] UPLO(lmat.strcode)=(%c)\n",UPLO(lmat.strcode));
   if ((n=lmat.n)!=lmat.m ||
       (!(islower=(UPLO(lmat.strcode)=='L')) && UPLO(lmat.strcode)!='U'))
     mexErrMsgTxt("L must be lower/upper triangular (use UPLO str. code!)");
@@ -107,14 +116,26 @@ void mexFunction(int nlhs,mxArray *plhs[],int nrhs,const mxArray *prhs[])
   if (i<n || i<r) mexErrMsgTxt("WORKV too short");
   wkvec=mxGetPr(prhs[4]);
 
+  for (i=0,sz=n,tbuff=lmat.buff; i<n-1; i++) {
+    if (*tbuff<=0.0) {
+        printf("[choluprk1] lfact is not positive definite.\n");
+        retcode=1; break;
+    }
+    tbuff+=(lmat.stride+1);
+  }
+      
   /* Generate Givens rotations, update L */
   BLASFUNC(dcopy) (&n,vvec,&ione,wkvec,&ione);
   stp=islower?1:lmat.stride;
   for (i=0,sz=n,tbuff=lmat.buff; i<n-1; i++) {
     /* drotg(a,b,c,s): J = [c s; -s c], s.t. J [a; b] = [r; 0]
        a overwritten by r, b by some other information (NOT 0!) */
-    if (*tbuff==0.0 && wkvec[i]==0.0) {
-      retcode=1; break;
+    // already in good shape, safe to skip
+    if (wkvec[i]==0.0) {
+      cvec[i]=1; svec[i]=0;
+      sz--;
+      tbuff+=(lmat.stride+1);
+      continue;
     }
     BLASFUNC(drotg) (tbuff,wkvec+i,cvec+i,svec+i);
     /* Do not want negative elements on factor diagonal */
@@ -130,6 +151,8 @@ void mexFunction(int nlhs,mxArray *plhs[],int nrhs,const mxArray *prhs[])
     BLASFUNC(drot) (&sz,tbuff+stp,&stp,wkvec+(i+1),&ione,cvec+i,svec+i);
     tbuff+=(lmat.stride+1);
   }
+  
+  // why computing this additional Givens?
   if (retcode==0 && (*tbuff!=0.0 || wkvec[n-1]!=0.0)) {
     BLASFUNC(drotg) (tbuff,wkvec+(n-1),cvec+i,svec+i);
     if ((temp=*tbuff)<0.0) {
@@ -138,6 +161,7 @@ void mexFunction(int nlhs,mxArray *plhs[],int nrhs,const mxArray *prhs[])
   } else retcode=1;
 
   /* Dragging along */
+  /* no sparse matrix support yet */
   if (r>0 && retcode==0) {
     BLASFUNC(dcopy) (&r,yvec,&ione,wkvec,&ione);
     for (i=0; i<n; i++)

@@ -33,13 +33,19 @@ end
 
 %% test minimum positive update
 fprintf(1,'Testing minimum pos. updates\n');
-for i=1:10
-  % Create matrix A with controlled spectrum
+for i=1:3
+  % Create matrix A with controlled spectrum (dense)
   [q,r]=qr(randn(n,n));
   a=muldiag(q,rand(n,1)*(maxlam-minlam)+minlam)*q';
   lfact=chol(a)';
+%   % (sparse)
+%   ah = sprand(n,n,0.01);
+%   a = ah*ah'+speye(n);
+%   lfact = chol(a,'lower');
+  fprintf('[testprog1] nnz(lfact)=%d\n',nnz(lfact));
   % Update
-  vec=randn(n,1);
+%   vec=randn(n,1); vec(randperm(n,10))=0;
+  vec=zeros(n,1);
   if choluprk1({lfact,[1 1 n n],'L '},vec,cvec,svec,wkvec)~=0
     error('Numerical error in CHOLUPRK1!');
   end

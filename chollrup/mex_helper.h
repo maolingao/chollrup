@@ -30,6 +30,9 @@ typedef struct {
   int m,n;
   int stride;
   char strcode[4];
+  mwSize nnz;          // sparse matrix only!
+  mwIndex *ir, *jc; // sparse matrix only!
+  bool isSparse;
 } fst_matrix;
 
 /*
@@ -151,10 +154,31 @@ void parseBLASMatrix(const mxArray* arg,const char* name,
   mat->strcode[1]=mat->strcode[3]=0;
   if (!mxIsCell(arg)) {
     /* No cell array: Must be normal matrix */
+    printf("[parseBLASMatrix] Normal matrix\n");
     checkMatrix(arg,name,m,n);
     mat->buff=mxGetPr(arg);
     mat->stride=mat->m=mxGetM(arg); mat->n=mxGetN(arg);
+    
+    /* sparse matrix additionals */
+    bmat = arg;
+    if (mxIsSparse(bmat)){        
+        mat->ir = mxGetIr(bmat);
+        mat->jc = mxGetJc(bmat);
+        mat->nnz = mat->jc[mat->n];
+        mat->isSparse = true;
+//         printf("[parseBLASMatrix] sparse (%d,%d) matrix nnz=%d\n",mat->m,mat->n,mxGetNzmax(bmat));
+        printf("[parseBLASMatrix] sparse (%d,%d) matrix nnz=%d\n",mat->m,mat->n,mat->nnz);
+
+
+    }
+    else{
+        mat->isSparse = false;
+        printf("[parseBLASMatrix] dense (%d,%d) matrix\n",mat->m,mat->n);
+    }
+    
+    
   } else {
+    printf("[parseBLASMatrix] cell (%d,%d) matrix\n",mxGetM(arg),mxGetN(arg));
     if ((csz=mxGetM(arg)*mxGetN(arg))<2) {
       sprintf(errMsg,"Array %s has wrong size",name);
       mexErrMsgTxt(errMsg);
@@ -177,8 +201,25 @@ void parseBLASMatrix(const mxArray* arg,const char* name,
       sprintf(errMsg,"Matrix %s has wrong size",name);
       mexErrMsgTxt(errMsg);
     }
+    /* fill mat: mat is a subblock of arg{0} */
     mat->buff=mxGetPr(bmat)+(xs*bm+ys);
     mat->m=am; mat->n=an; mat->stride=bm;
+    
+    /* sparse matrix additionals */
+    if (mxIsSparse(bmat)){        
+        mat->ir = mxGetIr(bmat);
+        mat->jc = mxGetJc(bmat);
+        mat->nnz = mat->jc[mat->n];
+        mat->isSparse = true;
+//         printf("[parseBLASMatrix] sparse (%d,%d) matrix nnz=%d\n",mat->m,mat->n,mxGetNzmax(bmat));
+        printf("[parseBLASMatrix] sparse (%d,%d) matrix nnz=%d\n",mat->m,mat->n,mat->nnz);
+
+    }
+    else{
+        mat->isSparse = false;
+        printf("[parseBLASMatrix] dense (%d,%d) matrix\n",mat->m,mat->n);
+    }
+    
     if (csz>2) {
       /* Structure codes */
       scdvec=mxGetCell(arg,2);
@@ -203,6 +244,7 @@ void parseBLASMatrix(const mxArray* arg,const char* name,
       mat->strcode[0]=sbuff[0]; mat->strcode[2]=sbuff[1];
     }
   }
+  
 }
 
 void fillVec(double* vec,int n,double val)
