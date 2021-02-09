@@ -5,10 +5,78 @@ path = fileparts(path);
 cd(path)
 addpath('../../essential/essential');
 %
-n=1000;
+n=100;
 maxlam=2; minlam=0.1;
 cvec=zeros(n,1); svec=zeros(n,1);
 wkvec=zeros(3*n,1);
+
+%% test change underlying memory pointer
+%
+fprintf(1,'Testing Matlab IO modifification of underlying pointer.\n');
+density = 0.2;
+for i=1:10
+    R = sprand(n,n,density);
+    R(n,n) = 0;
+    fprintf("[test]: input (%d,%d) with nzmax=%d; nnz=%d.\n",n,n,nzmax(R),nnz(R));
+
+    % if test_call_by_ref({R,[1 1 n n],'L '})~=0
+    R_ = test_call_by_ref(R);
+    
+end
+
+%% test sparse positive update
+fprintf(1,'Testing minimum pos. updates\n');
+for i=1:10
+  % (sparse)
+  ah = sprand(n,n,0.1);
+  a = ah*ah'+1e0*speye(n);
+  lfact = chol(a,'lower');
+  %
+  ltmp=full(lfact);
+  lfactf=ltmp(:,:);
+%   fprintf('[testprog1] nnz(lfact)=%d\n',nnz(lfact));
+  % Updatec
+  vec=randn(n,1);
+%   vec=zeros(n,1);  % check 1: choluprk1 should return the same factor
+%   vec(end)=1;
+  vec1 = vec(:,:);
+  if choluprk1s(lfact,vec,cvec,svec)~=0
+    error('Numerical error in CHOLUPRK1!');
+  end
+  lfactf_updated=full(lfact);
+  l_2=chol(a+vec1*vec1')';
+  fprintf(1,'Max. dist. L: %e\n',max(max(abs(lfact-l_2)))); % not enough input arguments
+end
+
+
+
+%% test minimum positive update
+fprintf(1,'Testing minimum pos. updates\n');
+for i=1:10
+  % Create matrix A with controlled spectrum (dense)
+  % (dense)
+  [q,r]=qr(randn(n,n));
+  a=muldiag(q,rand(n,1)*(maxlam-minlam)+minlam)*q';
+  lfact=chol(a)';
+%   % (sparse)
+%   ah = sprand(n,n,0.1);
+%   a = ah*ah'+1e0*speye(n);
+%   lfact = chol(a,'lower');
+%   %
+%   ltmp=full(lfact);
+%   lfactf=ltmp(:,:);
+%   fprintf('[testprog1] nnz(lfact)=%d\n',nnz(lfact));
+  % Update
+  vec=randn(n,1);
+  vec1=vec(:,:);
+%   vec=zeros(n,1);  % check 1: choluprk1 should return the same factor
+  if choluprk1({lfact,[1 1 n n],'L '},vec,cvec,svec,wkvec)~=0
+    error('Numerical error in CHOLUPRK1!');
+  end
+  lfactf_updated=full(lfact);
+  l_2=chol(a+vec*vec')';
+  fprintf(1,'Max. dist. L: %e\n',max(max(abs(lfact-l_2)))); % not enough input arguments
+end
 
 %%
 % Test positive updates
@@ -31,27 +99,6 @@ for i=1:10
   fprintf(1,'Max. dist. Z: %e\n',max(max(abs(z-z_2))));
 end
 
-%% test minimum positive update
-fprintf(1,'Testing minimum pos. updates\n');
-for i=1:3
-  % Create matrix A with controlled spectrum (dense)
-  [q,r]=qr(randn(n,n));
-  a=muldiag(q,rand(n,1)*(maxlam-minlam)+minlam)*q';
-  lfact=chol(a)';
-%   % (sparse)
-%   ah = sprand(n,n,0.01);
-%   a = ah*ah'+speye(n);
-%   lfact = chol(a,'lower');
-  fprintf('[testprog1] nnz(lfact)=%d\n',nnz(lfact));
-  % Update
-%   vec=randn(n,1); vec(randperm(n,10))=0;
-  vec=zeros(n,1);
-  if choluprk1({lfact,[1 1 n n],'L '},vec,cvec,svec,wkvec)~=0
-    error('Numerical error in CHOLUPRK1!');
-  end
-  l_2=chol(a+vec*vec')';
-  fprintf(1,'Max. dist. L: %e\n',max(max(abs(lfact-l_2)))); % not enough input arguments
-end
 
 %%
 % Test negative updates

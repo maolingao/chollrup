@@ -1,7 +1,8 @@
 /* -------------------------------------------------------------------
  * Helper functions for MEX functions
  * -------------------------------------------------------------------
- * Author: Matthias Seeger
+ * Original Author: Matthias Seeger
+ * Author: Maolin Gao
  * ------------------------------------------------------------------- */
 
 #ifndef MEX_HELPER_H
@@ -9,6 +10,8 @@
 
 #include <math.h>
 #include "mex.h"
+#include <stdlib.h>
+#include <string.h>
 
 char errMsg[];
 
@@ -31,9 +34,78 @@ typedef struct {
   int stride;
   char strcode[4];
   mwSize nnz;          // sparse matrix only!
-  mwIndex *ir, *jc; // sparse matrix only!
+  mwSize nzmax;        // sparse matrix only!
+  mwIndex *ir, *jc;    // sparse matrix only!
   bool isSparse;
 } fst_matrix;
+
+typedef struct {
+  double* buff;
+  int n;
+  mwSize nnz;          // sparse matrix only!
+  mwIndex *ir;         // sparse matrix only!
+  bool isSparse;
+} fst_vector;
+
+void fst_matrix_init(fst_vector *tbuff_sparse, const int n, fst_matrix* lmat)
+{
+    mwSize nnz=0;
+    for (int i=0; i<n; i++)
+    {
+        nnz += tbuff_sparse[i].nnz;
+//         printf("[fst_matrix_init] nnz=%d.\n",(int)nnz);
+    }
+    
+    // init and memory allocation
+    lmat->nnz=nnz;
+    lmat->isSparse=true;
+    lmat->n=n;
+    lmat->m=n;      // assuming square L!
+    lmat->stride=n; // assuming square L!
+    
+    lmat->buff=(double*) mxMalloc(nnz * sizeof(double));
+    lmat->ir=(mwIndex*) mxMalloc(nnz * sizeof(mwIndex));
+    lmat->jc=(mwIndex*) mxMalloc((n+1) * sizeof(mwIndex));
+    
+    if (lmat->buff == NULL || lmat->ir == NULL || lmat->jc == NULL)                     
+    {
+        printf("Error! memory not allocated for fst_matrix.");
+        exit(0);
+    }
+    mexMakeMemoryPersistent(lmat->buff);
+    mexMakeMemoryPersistent(lmat->ir);
+    mexMakeMemoryPersistent(lmat->jc);
+
+    // content filling
+    lmat->jc[0] = 0;
+    for (int i=0; i<n; i++)
+    {
+//         printf("[fst_matrix_init] processing col=%d.\n",i+1);
+        lmat->jc[i+1] = lmat->jc[i] + tbuff_sparse[i].nnz;
+        memcpy((lmat->buff)+(lmat->jc[i]), tbuff_sparse[i].buff, tbuff_sparse[i].nnz*sizeof(double));
+        memcpy((lmat->ir)+(lmat->jc[i]), tbuff_sparse[i].ir, tbuff_sparse[i].nnz*sizeof(mwIndex));
+        
+        // free memory in the temporary array of sparse columns
+        mxFree(tbuff_sparse[i].buff);
+        mxFree(tbuff_sparse[i].ir);
+    }
+}
+
+void fst_vector_alloc(fst_vector *fvec, const int n, const mwSize nnz)
+{
+    fvec->n=n;
+    fvec->nnz=nnz;
+    fvec->isSparse=true;
+    
+    fvec->buff=(double*) mxMalloc(nnz * sizeof(double));
+    fvec->ir=(mwIndex*) mxMalloc(nnz * sizeof(mwIndex));
+    
+    if (fvec->buff == NULL || fvec->ir == NULL)                      
+    {
+        printf("Error! memory not allocated for fst_vector.");
+        exit(0);
+    }
+}
 
 /*
  * Macros picking out specific positions from structure code array
@@ -42,9 +114,48 @@ typedef struct {
 
 #define DIAG(arr) (arr)[2]
 
+#define IsNonZero(d) (fabs(d)>=1e-6)
 /*
  * Exported functions
  */
+
+void sparse2full(const double* pr, const int offset, const int numNonZeros, const mwIndex* ir, double* pr_full)
+{
+    for (int i=0; i<numNonZeros; i++){
+       pr_full[(*(ir+i)-offset)] = pr[i];
+   }
+
+}
+
+void full2sparse(const double* lcol_full, const int n, const int n_to_rot, fst_vector* lcol)
+{
+    // memory estimation
+    mwSize nnz=0;
+    for (const double *ptr={lcol_full}; ptr<(lcol_full+n_to_rot); ptr++){
+        if (IsNonZero(*ptr)){
+//             printf("[full2sparse] *ptr=%f \n ", *ptr);
+            nnz++;
+        }
+    }
+    
+    // memory allocation
+    fst_vector_alloc(lcol, n, nnz);
+    
+    // content filling
+    int i=0;
+    int idx_row = 0;
+    int idx_pivot = n-n_to_rot;
+    for (const double *ptr={lcol_full}; ptr<(lcol_full+n_to_rot); ptr++){
+        if (IsNonZero(*ptr)){
+            lcol->buff[i] = *ptr;
+            lcol->ir[i] = idx_pivot + idx_row;
+//             printf("[full2sparse]: lcol(%d)=%f.\n",lcol->ir[i],lcol->buff[i]);
+            i++;
+        }
+        idx_row++;
+    }
+    
+}
 
 double getScalar(const mxArray* arg,const char* name)
 {
@@ -154,7 +265,7 @@ void parseBLASMatrix(const mxArray* arg,const char* name,
   mat->strcode[1]=mat->strcode[3]=0;
   if (!mxIsCell(arg)) {
     /* No cell array: Must be normal matrix */
-    printf("[parseBLASMatrix] Normal matrix\n");
+//     printf("[parseBLASMatrix] Normal matrix\n");
     checkMatrix(arg,name,m,n);
     mat->buff=mxGetPr(arg);
     mat->stride=mat->m=mxGetM(arg); mat->n=mxGetN(arg);
@@ -164,21 +275,21 @@ void parseBLASMatrix(const mxArray* arg,const char* name,
     if (mxIsSparse(bmat)){        
         mat->ir = mxGetIr(bmat);
         mat->jc = mxGetJc(bmat);
+        mat->nzmax = mxGetNzmax(bmat);
         mat->nnz = mat->jc[mat->n];
         mat->isSparse = true;
-//         printf("[parseBLASMatrix] sparse (%d,%d) matrix nnz=%d\n",mat->m,mat->n,mxGetNzmax(bmat));
-        printf("[parseBLASMatrix] sparse (%d,%d) matrix nnz=%d\n",mat->m,mat->n,mat->nnz);
+//         printf("[parseBLASMatrix] sparse (%d,%d) matrix nnz=%d\n",mat->m,mat->n,mat->nnz);
 
 
     }
     else{
         mat->isSparse = false;
-        printf("[parseBLASMatrix] dense (%d,%d) matrix\n",mat->m,mat->n);
+//         printf("[parseBLASMatrix] dense (%d,%d) matrix\n",mat->m,mat->n);
     }
     
     
   } else {
-    printf("[parseBLASMatrix] cell (%d,%d) matrix\n",mxGetM(arg),mxGetN(arg));
+//     printf("[parseBLASMatrix] cell (%d,%d) matrix\n",mxGetM(arg),mxGetN(arg));
     if ((csz=mxGetM(arg)*mxGetN(arg))<2) {
       sprintf(errMsg,"Array %s has wrong size",name);
       mexErrMsgTxt(errMsg);
@@ -204,6 +315,7 @@ void parseBLASMatrix(const mxArray* arg,const char* name,
     /* fill mat: mat is a subblock of arg{0} */
     mat->buff=mxGetPr(bmat)+(xs*bm+ys);
     mat->m=am; mat->n=an; mat->stride=bm;
+    mat->nzmax = mxGetNzmax(bmat);
     
     /* sparse matrix additionals */
     if (mxIsSparse(bmat)){        
@@ -211,13 +323,12 @@ void parseBLASMatrix(const mxArray* arg,const char* name,
         mat->jc = mxGetJc(bmat);
         mat->nnz = mat->jc[mat->n];
         mat->isSparse = true;
-//         printf("[parseBLASMatrix] sparse (%d,%d) matrix nnz=%d\n",mat->m,mat->n,mxGetNzmax(bmat));
-        printf("[parseBLASMatrix] sparse (%d,%d) matrix nnz=%d\n",mat->m,mat->n,mat->nnz);
+//         printf("[parseBLASMatrix] sparse (%d,%d) matrix nnz=%d\n",mat->m,mat->n,mat->nnz);
 
     }
     else{
         mat->isSparse = false;
-        printf("[parseBLASMatrix] dense (%d,%d) matrix\n",mat->m,mat->n);
+//         printf("[parseBLASMatrix] dense (%d,%d) matrix\n",mat->m,mat->n);
     }
     
     if (csz>2) {

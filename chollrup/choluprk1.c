@@ -83,12 +83,12 @@ void mexFunction(int nlhs,mxArray *plhs[],int nrhs,const mxArray *prhs[])
   if (nlhs>1)
     mexErrMsgTxt("Too many return arguments");
   
-    if (!mxIsCell(prhs[0])) {
-        printf("[choluprk1] Normal matrix\n");
-    }
-    else {
-        printf("[choluprk1] Cell matrix\n");
-    }
+//     if (!mxIsCell(prhs[0])) {
+//         printf("[choluprk1] Normal matrix\n");
+//     }
+//     else {
+//         printf("[choluprk1] Cell matrix\n");
+//     }
   parseBLASMatrix(prhs[0],"L",&lmat,-1,-1);
   /*
   sprintf(errMsg,"%d, %d, '%s', %c\n",lmat.m,lmat.n,lmat.strcode,
