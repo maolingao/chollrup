@@ -41,7 +41,6 @@ typedef struct {
 
 typedef struct {
   double* buff;
-  int n;
   mwSize nnz;          // sparse matrix only!
   mwIndex *ir;         // sparse matrix only!
   bool isSparse;
@@ -91,9 +90,8 @@ void fst_matrix_init(fst_vector *tbuff_sparse, const int n, fst_matrix* lmat)
     }
 }
 
-void fst_vector_alloc(fst_vector *fvec, const int n, const mwSize nnz)
+void fst_vector_alloc(fst_vector *fvec, const mwSize nnz)
 {
-    fvec->n=n;
     fvec->nnz=nnz;
     fvec->isSparse=true;
     
@@ -139,7 +137,7 @@ void full2sparse(const double* lcol_full, const int n, const int n_to_rot, fst_v
     }
     
     // memory allocation
-    fst_vector_alloc(lcol, n, nnz);
+    fst_vector_alloc(lcol, nnz);
     
     // content filling
     int i=0;
@@ -153,6 +151,18 @@ void full2sparse(const double* lcol_full, const int n, const int n_to_rot, fst_v
             i++;
         }
         idx_row++;
+    }
+}
+
+void extract_sparse_col(const double* pr, const int numNonZeros, const mwIndex* ir, fst_vector* lcol)
+{
+    // memory allocation
+    fst_vector_alloc(lcol, numNonZeros);
+    
+    // content filling
+    for (int i=0; i<numNonZeros; i++){
+        lcol->buff[i] = pr[i];
+        lcol->ir[i] = ir[i];
     }
     
 }

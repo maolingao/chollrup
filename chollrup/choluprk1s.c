@@ -75,38 +75,50 @@ void mexFunction(int nlhs,mxArray *plhs[],int nrhs,const mxArray *prhs[])
     int numNonZeros;
     mwIndex* ircol;
     for (i=0,sz=n,tbuff=pr; i<n-1; i++) {
-    // printf("[choluprk1s] processing column %d. \n", i+1);
+//         printf("[choluprk1s] processing column %d. \n", i+1);
 
-    // for each column
-    // convert the sparse column to full (progressive shrinking)
-    double tbuff_full[sz];
-    memset(tbuff_full, 0, sz*sizeof(double));   // initialise tbuff_full to all zero
-    numNonZeros = jc[i+1]-jc[i];                // numNonZeros of current column i
-    ircol = &ir[jc[i]];                         // pointer to the start of the ir of current column i
-    sparse2full(tbuff,i,numNonZeros,ircol,tbuff_full);
-//     printf("[choluprk1s] compute Givens using (%f,%f)\n \t numNonZeros=%d, tbuff[0]=%f.\n",tbuff_full[0],*(vvec+i),numNonZeros,(tbuff[0]));
-    
-    // compute Givens
-    BLASFUNC(drotg) (tbuff_full,vvec+i,cvec+i,svec+i);
-    
-    /* Do not want negative elements on factor diagonal */
-    if ((temp=*tbuff_full)<0.0) {
-        *tbuff_full=-temp; cvec[i]=-cvec[i]; svec[i]=-svec[i];
-    } else if (temp==0.0) {
-        sprintf(errMsg,"Zero eigenvalue of new factor.");
-        mexErrMsgTxt(errMsg);
-        retcode=1; break;
-    }
+        // for each column
+        numNonZeros = jc[i+1]-jc[i];                // numNonZeros of current column i
+        ircol = &ir[jc[i]];                         // pointer to the start of the ir of current column i
+        
+        /* if the pivot is already ZERO, skip the Givens rotation */
+        if (IsNonZero(*(vvec+i))){
+            /* pivot!=0 */
+            
+            // convert the sparse column to full (progressive shrinking)
+            double tbuff_full[sz];
+            memset(tbuff_full, 0, sz*sizeof(double));   // initialise tbuff_full to all zero
+            sparse2full(tbuff,i,numNonZeros,ircol,tbuff_full);
+//             printf("[choluprk1s] compute Givens using (%f,%f)\n \t numNonZeros=%d, tbuff[0]=%f.\n",tbuff_full[0],*(vvec+i),numNonZeros,(tbuff[0]));
 
-    // apply Givens to the rest of dense columns
-    sz--;
-    BLASFUNC(drot) (&sz,tbuff_full+1,&ione,vvec+(i+1),&ione,cvec+i,svec+i);
+            // compute Givens
+            BLASFUNC(drotg) (tbuff_full,vvec+i,cvec+i,svec+i);
 
-    // convert the full column to sparse
-    full2sparse(tbuff_full, n, sz+1, &(tbuff_sparse[i]));
+            /* Do not want negative elements on factor diagonal */
+            if ((temp=*tbuff_full)<0.0) {
+                *tbuff_full=-temp; cvec[i]=-cvec[i]; svec[i]=-svec[i];
+            } else if (temp==0.0) {
+                sprintf(errMsg,"Zero eigenvalue of new factor.");
+                mexErrMsgTxt(errMsg);
+                retcode=1; break;
+            }
 
-    // logistics
-    tbuff+=numNonZeros;
+            // apply Givens to the rest of dense columns
+            sz--;
+            BLASFUNC(drot) (&sz,tbuff_full+1,&ione,vvec+(i+1),&ione,cvec+i,svec+i);
+
+            // convert the full column to sparse
+            full2sparse(tbuff_full, n, sz+1, &(tbuff_sparse[i]));
+        }else{
+            /* pivot==0 */
+            
+            // convert the current sparse column to tbuff_sparse[i]
+            extract_sparse_col(tbuff, numNonZeros, ircol, &(tbuff_sparse[i]));
+            sz--;
+        }
+
+        // logistics
+        tbuff+=numNonZeros;
     }
 
     // the very last Givens

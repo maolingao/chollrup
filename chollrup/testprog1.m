@@ -5,7 +5,7 @@ path = fileparts(path);
 cd(path)
 addpath('../../essential/essential');
 %
-n=100;
+n=10;
 maxlam=2; minlam=0.1;
 cvec=zeros(n,1); svec=zeros(n,1);
 wkvec=zeros(3*n,1);
@@ -26,6 +26,8 @@ end
 
 %% test sparse positive update
 fprintf(1,'Testing minimum pos. updates\n');
+
+fprintf("nnz(full_factor)=%d.\n",n+(n^2-n)/2);
 for i=1:10
   % (sparse)
   ah = sprand(n,n,0.1);
@@ -45,7 +47,7 @@ for i=1:10
   end
   lfactf_updated=full(lfact);
   l_2=chol(a+vec1*vec1')';
-  fprintf(1,'Max. dist. L: %e\n',max(max(abs(lfact-l_2)))); % not enough input arguments
+  fprintf(1,'Max. dist. L: %e, nnz(lfact)=%d.\n',max(max(abs(lfact-l_2))),nnz(lfact)); % not enough input arguments
 end
 
 
@@ -58,14 +60,6 @@ for i=1:10
   [q,r]=qr(randn(n,n));
   a=muldiag(q,rand(n,1)*(maxlam-minlam)+minlam)*q';
   lfact=chol(a)';
-%   % (sparse)
-%   ah = sprand(n,n,0.1);
-%   a = ah*ah'+1e0*speye(n);
-%   lfact = chol(a,'lower');
-%   %
-%   ltmp=full(lfact);
-%   lfactf=ltmp(:,:);
-%   fprintf('[testprog1] nnz(lfact)=%d\n',nnz(lfact));
   % Update
   vec=randn(n,1);
   vec1=vec(:,:);
