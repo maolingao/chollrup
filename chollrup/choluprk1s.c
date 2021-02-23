@@ -137,8 +137,8 @@ void mexFunction(int nlhs,mxArray *plhs[],int nrhs,const mxArray *prhs[])
     if (retcode==0 && (*tbuff!=0.0 || vvec[i]!=0.0)) {
         BLASFUNC(drotg) (tbuff_sparse[i].buff,vvec+i,cvec+i,svec+i);
 //         printf("[choluprk1s] done last Givens, L[end]=%f, vvec[end]=%f, cvec[end]=%f, svec[end]=%f.\n", *(tbuff_sparse[i].buff), *(vvec+i), *(cvec+i), *(svec+i) );
-        if ((temp=*tbuff)<0.0) {
-          *tbuff=-temp; cvec[i]=-cvec[i]; svec[i]=-svec[i];
+        if ((temp=tbuff_sparse[i].buff[0])<0.0) {
+          tbuff_sparse[i].buff[0]=-temp; cvec[i]=-cvec[i]; svec[i]=-svec[i];
         } else if (temp==0.0) retcode=1;
     } else retcode=1;
     
